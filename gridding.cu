@@ -21,7 +21,8 @@ int main(int argc, char * const argv[])
 {
 	int tamano;//tamaño de imagen
 	int numdatos;//número de pasos
-	int delta; 
+	float deltaX_arcoseg, deltaX_radian;
+	float deltaU; 
 	int threads_num_X;//numero de hebras
 	int threads_num_Y;//numero de hebras
 	char* archivo_entrada=NULL;
@@ -40,7 +41,7 @@ int main(int argc, char * const argv[])
 				numdatos = atoi(optarg);
 				break;
 			case 'd':
-				delta = atoi(optarg);
+				deltaX_arcoseg = atoi(optarg);
 				break;
 			case 'N':
 				tamano = atoi(optarg);
@@ -70,11 +71,11 @@ int main(int argc, char * const argv[])
 		printf("El parametro -N debe estár y ser mayor que 0\n");
 		exit(1);
 	}
-	if(delta==0){
+	if(numdatos==0){
 		printf("El parametro -z debe estár y ser mayor que 0\n");
 		exit(1);
 	}
-	if(delta==0){
+	if(deltaX_arcoseg==0){
 		printf("El parametro -d debe estár y ser mayor que 0\n");
 		exit(1);
 	}
@@ -84,6 +85,9 @@ int main(int argc, char * const argv[])
 	if(archivo_salida==NULL){
 		printf("Debe especificarse un archivo de salida\n");
 	}
+
+	//Transformacion de unidades necesaria para calcular delta U
+	deltaX_radian = arcoseg_radian(delta_arcoseg);
 
 	timestart = clock(); 
 
@@ -102,6 +106,15 @@ int main(int argc, char * const argv[])
 				b[j+n*i]=0;
 		}
 	}
+	
+	
+
+
+
+
+
+
+
 	//se declaran las variables CUDA
 	float *H;
 	float *H_1;
