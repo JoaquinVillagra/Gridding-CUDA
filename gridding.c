@@ -4,7 +4,8 @@
 #include <unistd.h>
 #include <sys/times.h>
 #include <time.h>
-
+#define PI 3.14159265358979323846
+#define FactorArcosegRad 0.00000484814
 
 clock_t timestart, timeend;
 
@@ -12,8 +13,8 @@ clock_t timestart, timeend;
 @brief Función que transforma un valor en arco segundo a radianes
 @param deltax: Valor numérico a transformar
 @returns Valor correspondiente a la entrada en radianes */
-float arcoseg_radian(float deltax){
-	return 0.000004848140*deltax;
+double arcoseg_radian(double deltax){
+	return FactorArcosegRad*deltax;
 }
 
 /**
@@ -21,9 +22,9 @@ float arcoseg_radian(float deltax){
 @param archivo: puntero al archivo a leer
 @param archivo: puntero al archivo a leer
 @returns  */
-float* readFile(FILE* archivo, int tamano){
-	float* elementos;
-	fread(elementos, tamano, sizeof(float), archivo);
+double* readFile(FILE* archivo, int tamano){
+	double* elementos = malloc(sizeof(double)*4*tamano);
+	fread(elementos, tamano*4, sizeof(double), archivo);
 	return elementos;
 }
 
@@ -35,17 +36,14 @@ void gridding_process(){
 int main(int argc, char * const argv[])
 {
 	int tamano;//tamaño de imagen
-	int numdatos;//número de pasos
-	float deltaX_arcoseg, deltaX_radian;
-	float deltaU; 
-	int threads_num_X;//numero de hebras
-	int threads_num_Y;//numero de hebras
+	long numdatos;//número de pasos
+	double deltaX_arcoseg, deltaX_radian;
+	double deltaU; 
 	char* archivo_entrada=NULL;
 	char* archivo_salida=NULL;
-	int c;
+	int i, j, c;
 
 	opterr = 0;
-	//GETOPT
 	while ((c = getopt (argc, argv, "i:z:d:N:o")) != -1)
 		switch (c)
 			{
@@ -56,7 +54,7 @@ int main(int argc, char * const argv[])
 				numdatos = atoi(optarg);
 				break;
 			case 'd':
-				deltaX_arcoseg = atoi(optarg);
+				deltaX_arcoseg = atof(optarg);
 				break;
 			case 'N':
 				tamano = atoi(optarg);
@@ -82,7 +80,7 @@ int main(int argc, char * const argv[])
 			- Valores mayores que cero
 			- Cadenas no nulas
 	**/
-	if(tamano==0){
+	if(tamano<=0){
 		printf("El parametro -N debe estár y ser mayor que 0\n");
 		exit(1);
 	}
@@ -101,22 +99,70 @@ int main(int argc, char * const argv[])
 		printf("Debe especificarse un archivo de salida\n");
 	}
 	//Transformacion de unidades necesaria para calcular delta U
-	deltaX_radian = arcoseg_radian(delta_arcoseg);
+	deltaX_radian = arcoseg_radian(deltaX_arcoseg);
+	printf("Delta X en radian %lf\n",  deltaX_radian);
+
+	//Determina delta U/V a utilizar
+	deltaU = 1/(tamano*deltaX_radian);
+
 	//Medición de tiempo de computo
 	timestart = clock(); 
-	//se calculan las dimenciones
-	const long n = Grilla;
-	const long N = n*n; 
 
+	//Lectura de entrada
 	FILE *entrada = fopen(archivo_entrada,"r");
-	float* data = readFile(entrada, 4*4*numdatos);
-	
+	//double* data = readFile(entrada, 4*numdatos);
 
+	//double *regularReal = malloc(sizeof(double)*tamano*tamano);
+	//double *regularImaginario = malloc(sizeof(double)*tamano*tamano);
+
+	double x, y, modx, mody;
+	double matriz_real[2048][2048];
+	double matriz_i[2048][2048];
+	for (int i = 0; i < 2048; ++i)
+	{
+		for (int j = 0; j < 2048; ++j)
+		{
+			matriz_real[i][j]=0;
+			matriz_i[i][j]=0;
+		}
+	}
+	printf("AQUI1\n");
+	double* data = readFile(entrada,numdatos);
+	for (int i = 0; i < numdatos; i++)
+	{
+		printf("[%lf,%lf,%lf,%lf]\n",data[i],data[numdatos+i],data[2*numdatos+i],data[3*numdatos+i] );
+		x = data[i]/deltaU+tamano/2;
+		y = data[numdatos+i]/deltaU+tamano/2;
+		modx = data[i] - x*deltaU;
+		mody = data[numdatos+i] - y*deltaU;
+		if(modx>deltaU/2){	
+			x+=1;
+		}
+		if (mody>deltaU/2)
+		{
+			y+=1;
+		}
+		printf("x es: %d e y es: %d\n", (int)x, (int)y);
+		//matriz_real[(int)y][(int)x] += data[2*numdatos+i];
+		//matriz_i[(int)y][(int)x] += data[3*numdatos+i];
+	}
+	fclose(entrada);
+	//printf("Delta U %lf\n", deltaU );
+	FILE *f = fopen("salida_real","wb");
+	FILE *g = fopen("salida_imaginaria","wb");
+	for (i = 0; i < tamano; i++)
+	{
+		fwrite(matriz_real[i],2048, sizeof(double),f);
+		fwrite(matriz_i[i],2048, sizeof(double),g);
+	}
+	printf("OK!	\n");
+
+	
 /*
 
 
 	//se declaran las variables CUDA
-	float *H;
+	double *H;
 	float *H_1;
 	float *H_2;
 	float *H_t;
