@@ -111,6 +111,7 @@ int main(int argc, char * const argv[])
 	double* data = readFile(entrada,numdatos);
 
 	double x, y, modx, mody;
+	//Crea matrices con memoria dinamica
 	double **matriz_real = (double**)malloc(sizeof(double*)*tamano);
 	double **matriz_i = (double**)malloc(sizeof(double*)*tamano);
 	for (i = 0; i < tamano; ++i)
@@ -118,7 +119,8 @@ int main(int argc, char * const argv[])
 		matriz_real[i] = (double*)malloc(sizeof(double)*tamano);
 		matriz_i[i] = (double*)malloc(sizeof(double)*tamano);
 	}
-	for (int i = 0; i < tamano; ++i)
+	//Inicializa matrices en cero
+	for (i = 0; i < tamano; ++i)
 	{
 		for (int j = 0; j < tamano; ++j)
 		{
@@ -126,13 +128,26 @@ int main(int argc, char * const argv[])
 			matriz_i[i][j]=0;
 		}
 	}
-	for (int i = 0; i < numdatos; i++)
+	//Creando arrays para coordenada X, Y, R e I
+	double *X = (double*)malloc(sizeof(double)*numdatos); 
+	double *Y = (double*)malloc(sizeof(double)*numdatos); 
+	double *R = (double*)malloc(sizeof(double)*numdatos); 
+	double *I = (double*)malloc(sizeof(double)*numdatos); 
+	for (i = 0; i < numdatos; i++)
+	{
+		X[i] = data[i];
+		Y[i] = data[i+numdatos];
+		R[i] = data[i+2*numdatos];
+		I[i] = data[i+3*numdatos];
+
+	}
+	for (i = 0; i < numdatos; i++)
 	{
 		//printf("[%lf,%lf,%lf,%lf]\n",data[i],data[numdatos+i],data[2*numdatos+i],data[3*numdatos+i] );
-		x = data[i]/deltaU+tamano/2;
-		y = data[numdatos+i]/deltaU+tamano/2;
-		modx = data[i] - x*deltaU;
-		mody = data[numdatos+i] - y*deltaU;
+		x = X[i]/deltaU+tamano/2;
+		y = Y[i]/deltaU+tamano/2;
+		modx = X[i] - x*deltaU;
+		mody = Y[i] - y*deltaU;
 		if(modx>deltaU/2){	
 			x+=1;
 		}
@@ -141,8 +156,8 @@ int main(int argc, char * const argv[])
 			y+=1;
 		}
 		//printf("x es: %d e y es: %d\n", (int)x, (int)y);
-		matriz_real[(int)y][(int)x] += data[2*numdatos+i];
-		matriz_i[(int)y][(int)x] += data[3*numdatos+i];
+		matriz_real[(int)y][(int)x] += R[i];
+		matriz_i[(int)y][(int)x] += I[i];
 	}
 	fclose(entrada);
 	//printf("Delta U %lf\n", deltaU );
