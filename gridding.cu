@@ -4,7 +4,8 @@
 #include <unistd.h>
 #include <sys/times.h>
 #include <time.h>
-
+#define PI 3.14159265358979323846
+#define FactorArcosegRad 0.00000484814
 
 clock_t timestart, timeend;
 
@@ -12,8 +13,8 @@ clock_t timestart, timeend;
 @brief Función que transforma un valor en arco segundo a radianes
 @param deltax: Valor numérico a transformar
 @returns Valor correspondiente a la entrada en radianes */
-float arcoseg_radian(float deltax){
-	return 0.000004848140*deltax;
+double arcoseg_radian(double deltax){
+	return FactorArcosegRad*deltax;
 }
 
 /**
@@ -21,32 +22,29 @@ float arcoseg_radian(float deltax){
 @param archivo: puntero al archivo a leer
 @param archivo: puntero al archivo a leer
 @returns  */
-float* readFile(FILE* archivo, int tamano){
-	float* elementos;
-	fread(elementos, tamano, sizeof(float), archivo);
+double* readFile(FILE* archivo, int tamano){
+	double* elementos = malloc(sizeof(double)*4*tamano);
+	fread(elementos, tamano*4, sizeof(double), archivo);
 	return elementos;
 }
 
+__global__ 
 void gridding_process(){
 
 }
-
 
 int main(int argc, char * const argv[])
 {
 	int tamano;//tamaño de imagen
 	int numdatos;//número de pasos
-	float deltaX_arcoseg, deltaX_radian;
-	float deltaU; 
-	int threads_num_X;//numero de hebras
-	int threads_num_Y;//numero de hebras
+	double deltaX_arcoseg, deltaX_radian;
+	double deltaU; 
 	char* archivo_entrada=NULL;
 	char* archivo_salida=NULL;
-	int c;
-
+	int i, j, c;
+	
 	opterr = 0;
-	//GETOPT
-	while ((c = getopt (argc, argv, "i:z:d:N:o")) != -1)
+	while ((c = getopt (argc, argv, "i:z:d:N:o:")) != -1)
 		switch (c)
 			{
 			case 'i':
@@ -56,7 +54,7 @@ int main(int argc, char * const argv[])
 				numdatos = atoi(optarg);
 				break;
 			case 'd':
-				deltaX_arcoseg = atoi(optarg);
+				deltaX_arcoseg = atof(optarg);
 				break;
 			case 'N':
 				tamano = atoi(optarg);
@@ -82,7 +80,7 @@ int main(int argc, char * const argv[])
 			- Valores mayores que cero
 			- Cadenas no nulas
 	**/
-	if(tamano==0){
+	if(tamano<=0){
 		printf("El parametro -N debe estár y ser mayor que 0\n");
 		exit(1);
 	}
@@ -101,59 +99,101 @@ int main(int argc, char * const argv[])
 		printf("Debe especificarse un archivo de salida\n");
 	}
 	//Transformacion de unidades necesaria para calcular delta U
-	deltaX_radian = arcoseg_radian(delta_arcoseg);
+	deltaX_radian = arcoseg_radian(deltaX_arcoseg);
+
+	//Determina delta U/V a utilizar
+	deltaU = 1/(tamano*deltaX_radian);
+
 	//Medición de tiempo de computo
 	timestart = clock(); 
-	//se calculan las dimenciones
-	const long n = Grilla;
-	const long N = n*n; 
 
+	//Lectura de entrada
 	FILE *entrada = fopen(archivo_entrada,"r");
-	float* data = readFile(entrada, 4*4*numdatos);
-	
+	double* data = readFile(entrada,numdatos);
 
-/*
+	double x, y, modx, mody;
+	//Crea matrices con memoria dinamica
+	double **matriz_real = (double**)malloc(sizeof(double*)*tamano);
+	double **matriz_i = (double**)malloc(sizeof(double*)*tamano);
+	for (i = 0; i < tamano; ++i)
+	{
+		matriz_real[i] = (double*)malloc(sizeof(double)*tamano);
+		matriz_i[i] = (double*)malloc(sizeof(double)*tamano);
+	}
+	//Inicializa matrices en cero
+	for (i = 0; i < tamano; ++i)
+	{
+		for (j = 0; j < tamano; ++j)
+		{
+			matriz_real[i][j]=0;
+			matriz_i[i][j]=0;
+		}
+	}
+	//Creando arrays para coordenada X, Y, R e I
+	double *X = (double*)malloc(sizeof(double)*numdatos); 
+	double *Y = (double*)malloc(sizeof(double)*numdatos); 
+	double *R = (double*)malloc(sizeof(double)*numdatos); 
+	double *I = (double*)malloc(sizeof(double)*numdatos);	
+	//Quizas necesite dos vectores adicionales para el gridding [matrices desenroyadas]
+	double *r = (double*)malloc(sizeof(double)*tamano*tamano);
+	double *k = (double*)malloc(sizeof(double)*tamano*tamano);
+	//Se asigan los valores correspondientes de la lectura
+	for (i = 0; i < numdatos; i++)
+	{
+		X[i] = data[i];
+		Y[i] = data[i+numdatos];
+		R[i] = data[i+2*numdatos];
+		I[i] = data[i+3*numdatos];
 
-
+	}
 	//se declaran las variables CUDA
-	float *H;
-	float *H_1;
-	float *H_2;
-	float *H_t;
+	double *C_X;
+	double *C_Y;
+	double *C_R;
+	double *C_I;
 	//Se reserva memoria CUDA
-	cudaMalloc( (void**)&H, N*sizeof(float) ); 
-	cudaMalloc( (void**)&H_1, N*sizeof(float) ); 
-	cudaMalloc( (void**)&H_2, N*sizeof(float) ); 
-	cudaMalloc( (void**)&H_t, N*sizeof(float) ); 
+	cudaMalloc( (void**)&C_X, numdatos*sizeof(double)); 
+	cudaMalloc( (void**)&C_Y, numdatos*sizeof(double)); 
+	cudaMalloc( (void**)&C_R, numdatos*sizeof(double)); 
+	cudaMalloc( (void**)&C_I, numdatos*sizeof(double)); 
 	//se copia la matriz iniciada en las matrices de trabajo en memoria global GPU
-	cudaMemcpy( H, b, N*sizeof(float), cudaMemcpyHostToDevice ); 
-	cudaMemcpy( H_1, b, N*sizeof(float), cudaMemcpyHostToDevice ); 
-	cudaMemcpy( H_2, b, N*sizeof(float), cudaMemcpyHostToDevice ); 
-	cudaMemcpy( H_t, b, N*sizeof(float), cudaMemcpyHostToDevice ); 
+	cudaMemcpy( C_X, X, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_Y, Y, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_R, R, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_I, I, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
 
 	//Se declaran las dimenciones
-	dim3 dimBlock( threads_num_X, threads_num_Y );
-	dim3 dimGrid( 1, 1 );
-		
-	for(i=0;i<Steps;i++){
-	//se ejecuta el kernel en la GPU
-	<<<dimGrid, dimBlock>>>(H,H_1,H_2,H_t,i,Steps,n);
-	//se espera a que terminen
-	cudaDeviceSynchronize();
-	}
-	//se obtiene la memoria de regreso
-	cudaMemcpy( b, H_t, N*sizeof(float), cudaMemcpyDeviceToHost ); 
-	//se libera la memoria global CUDA para que pueda ser usada por otro proceso
-	cudaFree( H );
-	cudaFree( H_1 );
-	cudaFree( H_2 );
-	cudaFree( H_t );
-	//Se escribe el archivo
-	FILE *f = fopen(salida_arg,"wb");
-	fwrite(b,N, sizeof(float),f);
+	//dim3 dimBlock( ? , ? );
+	//dim3 dimGrid( 1, 1 );
 
+	for (i = 0; i < numdatos; i++)
+	{
+		//printf("[%lf,%lf,%lf,%lf]\n",data[i],data[numdatos+i],data[2*numdatos+i],data[3*numdatos+i] );
+		x = X[i]/deltaU+tamano/2;
+		y = Y[i]/deltaU+tamano/2;
+		modx = X[i] - x*deltaU;
+		mody = Y[i] - y*deltaU;
+		if(modx>deltaU/2){	
+			x+=1;
+		}
+		if (mody>deltaU/2)
+		{
+			y+=1;
+		}
+		//printf("x es: %d e y es: %d\n", (int)x, (int)y);
+		matriz_real[(int)y][(int)x] += R[i];
+		matriz_i[(int)y][(int)x] += I[i];
+	}
+	fclose(entrada);
+	//printf("Delta U %lf\n", deltaU );
+	FILE *f = fopen("salida_real","wb");
+	FILE *g = fopen("salida_imaginaria","wb");
+	for (i = 0; i < tamano; i++)
+	{
+		fwrite(matriz_real[i],tamano, sizeof(double),f);
+		fwrite(matriz_i[i],tamano, sizeof(double),g);
+	}
 	timeend = clock(); // registramos el tiempo hasta el final
 	printf("Total = %f\n", (double) (timeend-timestart)/(double)CLOCKS_PER_SEC);
 	return EXIT_SUCCESS;
-*/
 }

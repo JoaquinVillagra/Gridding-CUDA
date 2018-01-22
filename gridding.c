@@ -163,8 +163,8 @@ int main(int argc, char * const argv[])
 	cudaMemcpy( C_I, I, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
 
 	//Se declaran las dimenciones
-	dim3 dimBlock( ? , ? );
-	dim3 dimGrid( 1, 1 );
+	//dim3 dimBlock( ? , ? );
+	//dim3 dimGrid( 1, 1 );
 
 	for (i = 0; i < numdatos; i++)
 	{
@@ -190,8 +190,8 @@ int main(int argc, char * const argv[])
 	FILE *g = fopen("salida_imaginaria","wb");
 	for (i = 0; i < tamano; i++)
 	{
-		fwrite(matriz_real[i],2048, sizeof(double),f);
-		fwrite(matriz_i[i],2048, sizeof(double),g);
+		fwrite(matriz_real[i],tamano, sizeof(double),f);
+		fwrite(matriz_i[i],tamano, sizeof(double),g);
 	}
 	timeend = clock(); // registramos el tiempo hasta el final
 	printf("Total = %f\n", (double) (timeend-timestart)/(double)CLOCKS_PER_SEC);

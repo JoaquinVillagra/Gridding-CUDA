@@ -37,7 +37,7 @@ int main(int argc, char * const argv[])
 	char* archivo_entrada=NULL;
 	char* archivo_salida=NULL;
 	int i, j, c;
-	
+
 	opterr = 0;
 	while ((c = getopt (argc, argv, "i:z:d:N:o:")) != -1)
 		switch (c)
@@ -146,8 +146,8 @@ int main(int argc, char * const argv[])
 	FILE *g = fopen("salida_imaginaria","wb");
 	for (i = 0; i < tamano; i++)
 	{
-		fwrite(matriz_real[i],2048, sizeof(double),f);
-		fwrite(matriz_i[i],2048, sizeof(double),g);
+		fwrite(matriz_real[i],tamano, sizeof(double),f);
+		fwrite(matriz_i[i],tamno, sizeof(double),g);
 	}
 	timeend = clock(); // registramos el tiempo hasta el final
 	printf("Total = %f\n", (double) (timeend-timestart)/(double)CLOCKS_PER_SEC);
