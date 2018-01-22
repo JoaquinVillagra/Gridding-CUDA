@@ -28,21 +28,18 @@ double* readFile(FILE* archivo, int tamano){
 	return elementos;
 }
 
-void gridding_process(){
-
-}
-
-
 int main(int argc, char * const argv[])
 {
+	printf("0!!!!\n");
 	int tamano;//tamaño de imagen
-	long numdatos;//número de pasos
+	int numdatos;//número de pasos
 	double deltaX_arcoseg, deltaX_radian;
 	double deltaU; 
 	char* archivo_entrada=NULL;
 	char* archivo_salida=NULL;
 	int i, j, c;
 
+	printf("1!!!!\n");
 	opterr = 0;
 	while ((c = getopt (argc, argv, "i:z:d:N:o")) != -1)
 		switch (c)
@@ -98,10 +95,12 @@ int main(int argc, char * const argv[])
 	if(archivo_salida==NULL){
 		printf("Debe especificarse un archivo de salida\n");
 	}
+	printf("ACAAA1\n");
 	//Transformacion de unidades necesaria para calcular delta U
 	deltaX_radian = arcoseg_radian(deltaX_arcoseg);
 	printf("Delta X en radian %lf\n",  deltaX_radian);
 
+	printf("ACAAA2\n");
 	//Determina delta U/V a utilizar
 	deltaU = 1/(tamano*deltaX_radian);
 
@@ -126,7 +125,7 @@ int main(int argc, char * const argv[])
 			matriz_i[i][j]=0;
 		}
 	}
-	printf("AQUI1\n");
+	printf("AQUI despues de set(0)\n");
 	double* data = readFile(entrada,numdatos);
 	for (int i = 0; i < numdatos; i++)
 	{
@@ -156,7 +155,7 @@ int main(int argc, char * const argv[])
 		fwrite(matriz_i[i],2048, sizeof(double),g);
 	}
 	printf("OK!	\n");
-
+	return(0);
 	
 /*
 
