@@ -28,6 +28,7 @@ double* readFile(FILE* archivo, int tamano){
 	return elementos;
 }
 
+__global__ 
 void gridding_process(){
 
 }
@@ -132,7 +133,11 @@ int main(int argc, char * const argv[])
 	double *X = (double*)malloc(sizeof(double)*numdatos); 
 	double *Y = (double*)malloc(sizeof(double)*numdatos); 
 	double *R = (double*)malloc(sizeof(double)*numdatos); 
-	double *I = (double*)malloc(sizeof(double)*numdatos); 
+	double *I = (double*)malloc(sizeof(double)*numdatos);	
+	//Quizas necesite dos vectores adicionales para el gridding [matrices desenroyadas]
+	double *r = (double*)malloc(sizeof(double)*tamano*tamano);
+	double *k = (double*)malloc(sizeof(double)*tamano*tamano);
+	//Se asigan los valores correspondientes de la lectura
 	for (i = 0; i < numdatos; i++)
 	{
 		X[i] = data[i];
@@ -141,6 +146,26 @@ int main(int argc, char * const argv[])
 		I[i] = data[i+3*numdatos];
 
 	}
+	//se declaran las variables CUDA
+	double *C_X;
+	double *C_Y;
+	double *C_R;
+	double *C_I;
+	//Se reserva memoria CUDA
+	cudaMalloc( (void*)&C_X, numdatos*sizeof(double)); 
+	cudaMalloc( (void*)&C_Y, numdatos*sizeof(double)); 
+	cudaMalloc( (void*)&C_R, numdatos*sizeof(double)); 
+	cudaMalloc( (void*)&C_I, numdatos*sizeof(double)); 
+	//se copia la matriz iniciada en las matrices de trabajo en memoria global GPU
+	cudaMemcpy( C_X, X, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_Y, Y, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_R, R, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_I, I, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
+
+	//Se declaran las dimenciones
+	dim3 dimBlock( ? , ? );
+	dim3 dimGrid( 1, 1 );
+
 	for (i = 0; i < numdatos; i++)
 	{
 		//printf("[%lf,%lf,%lf,%lf]\n",data[i],data[numdatos+i],data[2*numdatos+i],data[3*numdatos+i] );
