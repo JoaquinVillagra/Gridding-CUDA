@@ -1,4 +1,4 @@
-HLTauB6.raw => 6392752 visibilidades (-z)
-hd142527-co65.raw => 214988 visibilidades (-z)
+HLTauB6.raw => 3196376 visibilidades (-z) delta 0.003
+hd142527-co65.raw => 107494 visibilidades (-z) delta 0.02 - 0.05
 1 radian = 206265 segundo sexagesimal
 1 segundo sexagesimal = 0.000004848140 radianes
