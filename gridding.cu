@@ -12,16 +12,11 @@
 
 clock_t timestart, timeend;
 
-#if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 600
-#else
-__device__ double atomicAdd(double* a, double b) { return b; }
-#endif
-
 /**
 @brief Función que transforma un valor en arco segundo a radianes
 @param deltax: Valor numérico a transformar
 @returns Valor correspondiente a la entrada en radianes */
-double arcoseg_radian(double deltax){
+float arcoseg_radian(float deltax){
 	return FactorArcosegRad*deltax;
 }
 
@@ -37,34 +32,54 @@ double* readFile(FILE* archivo, int tamano){
 }
 
 __global__ 
-void gridding_process(float *X, float *Y, float *R, float *I, int num_datos, int tamano, float deltaU, float *r, float *k)
+void gridding_process(float *U, float *V, float *R, float *I, int num_datos, int tamano, float deltaU, float *r, float *k)
 {
 	long i = blockDim.x * blockIdx.x + threadIdx.x;
 	if(i<num_datos)
 	{
-		double x, y, modx, mody;
-		x = X[i]/deltaU+tamano/2;
-		y = Y[i]/deltaU+tamano/2;
-		modx = X[i] - x*deltaU;
-		mody = Y[i] - y*deltaU;
+		float x, y, modx, mody;
+		x = U[i]/deltaU+tamano/2;
+		y = V[i]/deltaU+tamano/2;
+		printf("%f - %f\n", U[i], V[i]);
+		modx = U[i] - x*deltaU;
+		mody = V[i] - y*deltaU;
+
 		if(modx>deltaU/2){	
 			x+=1;
 		}
+
 		if (mody>deltaU/2)
 		{
 			y+=1;
 		}
-		atomicAdd(&r[(int)y*tamano+(int)x], R[i]);
-		atomicAdd(&k[(int)y*tamano+(int)x], I[i]);
+
+		if ((int)x<tamano && (int)y<tamano)
+		{
+			atomicAdd(&r[(int)y*tamano+(int)x], R[i]);
+			atomicAdd(&k[(int)y*tamano+(int)x], I[i]);
+		}
 	}
+}
+
+__host__ unsigned long upper_power_of_two(unsigned long v)
+{
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v++;
+    return v;
+
 }
 
 int main(int argc, char * const argv[])
 {
 	int tamano;//tamaño de imagen
 	int numdatos;//número de pasos
-	double deltaX_arcoseg, deltaX_radian;
-	double deltaU; 
+	float deltaX_arcoseg, deltaX_radian;
+	float deltaU; 
 	char* archivo_entrada=NULL;
 	char* archivo_salida=NULL;
 	int i, c;
@@ -178,18 +193,18 @@ int main(int argc, char * const argv[])
 	cudaMemcpy( C_Y, Y, numdatos*sizeof(float), cudaMemcpyHostToDevice); 
 	cudaMemcpy( C_R, R, numdatos*sizeof(float), cudaMemcpyHostToDevice); 
 	cudaMemcpy( C_I, I, numdatos*sizeof(float), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_r, r, tamano*tamano*sizeof(float), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_k, k, tamano*tamano*sizeof(float), cudaMemcpyHostToDevice); 
+
 	//determino dimension para el kernel
-	long kernel_size, raiz;
-	raiz = (int)sqrt(numdatos);;
-	if(raiz % 2 != 0)
-		kernel_size = (raiz + 2)*(raiz + 2);
-	kernel_size = (raiz+1)*(raiz+1); 
-	
+	long kernel_size = upper_power_of_two(numdatos);
 	//Se declaran las dimenciones
 	dim3 dimBlock(BLOQUESIZE, 1);
-	dim3 dimGrid(kernel_size, 1);
+	dim3 dimGrid(kernel_size/BLOQUESIZE, 1);
 	//se ejecuta el kernel en la GPU
-	gridding_process<<<dimGrid, dimBlock>>>(C_X, C_Y, C_R, C_Y, numdatos, tamano, (float)deltaU, C_r, C_k);
+	//printf("%d - %d - %d\n", numdatos, kernel_size, kernel_size/BLOQUESIZE);
+
+	gridding_process<<<dimGrid, dimBlock>>>(C_X, C_Y, C_R, C_I, numdatos, tamano, deltaU, C_r, C_k);
 	//se espera a que terminen
 	cudaDeviceSynchronize();
 	//se obtiene la memoria de regreso
@@ -208,6 +223,9 @@ int main(int argc, char * const argv[])
 
 	fwrite(r, tamano*tamano, sizeof(float),f);
 	fwrite(k, tamano*tamano, sizeof(float),g);
+
+	fclose(f);
+	fclose(g);
 
 	timeend = clock(); // registramos el tiempo hasta el final
 	printf("Total = %f\n", (double) (timeend-timestart)/(double)CLOCKS_PER_SEC);
