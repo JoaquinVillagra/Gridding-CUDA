@@ -34,13 +34,13 @@ double* readFile(FILE* archivo, int tamano){
 __global__ void gridding_process(float *U, float *V, float *R, float *I, int num_datos, int tamano, float deltaU, float *r, float *k)
 {
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
-	printf("Hola %d\n", i );
+	//printf("Hola %d\n", i );
 	if(i<num_datos)
 	{
 		float x, y, modx, mody;
 		x = U[i]/deltaU+tamano/2;
 		y = V[i]/deltaU+tamano/2;
-		printf("%f - %f\n", U[i], V[i]);
+		//printf("%f - %f\n", U[i], V[i]);
 		modx = U[i] - x*deltaU;
 		mody = V[i] - y*deltaU;
 
