@@ -31,10 +31,10 @@ double* readFile(FILE* archivo, int tamano){
 	return elementos;
 }
 
-__global__ 
-void gridding_process(float *U, float *V, float *R, float *I, int num_datos, int tamano, float deltaU, float *r, float *k)
+__global__ void gridding_process(float *U, float *V, float *R, float *I, int num_datos, int tamano, float deltaU, float *r, float *k)
 {
-	long i = blockDim.x * blockIdx.x + threadIdx.x;
+	int i = blockDim.x * blockIdx.x + threadIdx.x;
+	printf("Hola %d\n", i );
 	if(i<num_datos)
 	{
 		float x, y, modx, mody;
@@ -197,10 +197,10 @@ int main(int argc, char * const argv[])
 	cudaMemcpy( C_k, k, tamano*tamano*sizeof(float), cudaMemcpyHostToDevice); 
 
 	//determino dimension para el kernel
-	long kernel_size = upper_power_of_two(numdatos);
+	long data_size_2 = upper_power_of_two(numdatos);
 	//Se declaran las dimenciones
 	dim3 dimBlock(BLOQUESIZE, 1);
-	dim3 dimGrid(kernel_size/BLOQUESIZE, 1);
+	dim3 dimGrid(data_size_2/BLOQUESIZE, 1);
 	//se ejecuta el kernel en la GPU
 	//printf("%d - %d - %d\n", numdatos, kernel_size, kernel_size/BLOQUESIZE);
 
