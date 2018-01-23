@@ -4,9 +4,11 @@
 #include <unistd.h>
 #include <sys/times.h>
 #include <time.h>
+#include <math.h>
 #include <cuda_runtime.h>
 #define PI 3.14159265358979323846
 #define FactorArcosegRad 0.00000484814
+#define BLOQUESIZE 32
 
 clock_t timestart, timeend;
 
@@ -35,12 +37,12 @@ double* readFile(FILE* archivo, int tamano){
 }
 
 __global__ 
-void gridding_process(double *X, double *Y, double *R, double *I, int num_datos, int tamano, double deltaU, double *r, double *k){
-
-	long i;
-	double x, y, modx, mody;
-	for (i = threadIdx.x; i < num_datos; i+=blockDim.x)
+void gridding_process(float *X, float *Y, float *R, float *I, int num_datos, int tamano, float deltaU, float *r, float *k)
+{
+	long i = blockDim.x * blockIdx.x + threadIdx.x;
+	if(i<num_datos)
 	{
+		double x, y, modx, mody;
 		x = X[i]/deltaU+tamano/2;
 		y = Y[i]/deltaU+tamano/2;
 		modx = X[i] - x*deltaU;
@@ -52,8 +54,6 @@ void gridding_process(double *X, double *Y, double *R, double *I, int num_datos,
 		{
 			y+=1;
 		}
-		//r[(int)y*tamano+(int)x] += R[i];
-		//k[(int)y*tamano+(int)x] += I[i];
 		atomicAdd(&r[(int)y*tamano+(int)x], R[i]);
 		atomicAdd(&k[(int)y*tamano+(int)x], I[i]);
 	}
@@ -138,20 +138,20 @@ int main(int argc, char * const argv[])
 	fclose(entrada);
 
 	//Creando arrays para coordenada X, Y, R e I
-	double *X = (double*)malloc(sizeof(double)*numdatos); 
-	double *Y = (double*)malloc(sizeof(double)*numdatos); 
-	double *R = (double*)malloc(sizeof(double)*numdatos); 
-	double *I = (double*)malloc(sizeof(double)*numdatos);	
+	float *X = (float*)malloc(sizeof(float)*numdatos); 
+	float *Y = (float*)malloc(sizeof(float)*numdatos); 
+	float *R = (float*)malloc(sizeof(float)*numdatos); 
+	float *I = (float*)malloc(sizeof(float)*numdatos);	
 	//Quizas necesite dos vectores adicionales para el gridding [matrices desenroyadas]
-	double *r = (double*)malloc(sizeof(double)*tamano*tamano);
-	double *k = (double*)malloc(sizeof(double)*tamano*tamano);
+	float *r = (float*)malloc(sizeof(float)*tamano*tamano);
+	float *k = (float*)malloc(sizeof(float)*tamano*tamano);
 	//Se asigan los valores correspondientes de la lectura
 	for (i = 0; i < numdatos; i++)
 	{
-		X[i] = data[i];
-		Y[i] = data[i+numdatos];
-		R[i] = data[i+2*numdatos];
-		I[i] = data[i+3*numdatos];
+		X[i] = (float)data[i];
+		Y[i] = (float)data[i+numdatos];
+		R[i] = (float)data[i+2*numdatos];
+		I[i] = (float)data[i+3*numdatos];
 
 	}
 	for (i = 0; i < tamano*tamano; ++i)
@@ -160,34 +160,41 @@ int main(int argc, char * const argv[])
 		k[i] = 0;
 	}
 	//se declaran las variables CUDA
-	double *C_X;
-	double *C_Y;
-	double *C_R;
-	double *C_I;
-	double *C_r;
-	double *C_k;
+	float *C_X;
+	float *C_Y;
+	float *C_R;
+	float *C_I;
+	float *C_r;
+	float *C_k;
 	//Se reserva memoria CUDA
-	cudaMalloc( (void**)&C_X, numdatos*sizeof(double)); 
-	cudaMalloc( (void**)&C_Y, numdatos*sizeof(double)); 
-	cudaMalloc( (void**)&C_R, numdatos*sizeof(double)); 
-	cudaMalloc( (void**)&C_I, numdatos*sizeof(double)); 
-	cudaMalloc( (void**)&C_r, tamano*tamano*sizeof(double)); 
-	cudaMalloc( (void**)&C_k, tamano*tamano*sizeof(double)); 
+	cudaMalloc( (void**)&C_X, numdatos*sizeof(float)); 
+	cudaMalloc( (void**)&C_Y, numdatos*sizeof(float)); 
+	cudaMalloc( (void**)&C_R, numdatos*sizeof(float)); 
+	cudaMalloc( (void**)&C_I, numdatos*sizeof(float)); 
+	cudaMalloc( (void**)&C_r, tamano*tamano*sizeof(float)); 
+	cudaMalloc( (void**)&C_k, tamano*tamano*sizeof(float)); 
 	//se copia la matriz iniciada en las matrices de trabajo en memoria global GPU
-	cudaMemcpy( C_X, X, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
-	cudaMemcpy( C_Y, Y, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
-	cudaMemcpy( C_R, R, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
-	cudaMemcpy( C_I, I, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_X, X, numdatos*sizeof(float), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_Y, Y, numdatos*sizeof(float), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_R, R, numdatos*sizeof(float), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_I, I, numdatos*sizeof(float), cudaMemcpyHostToDevice); 
+	//determino dimension para el kernel
+	long kernel_size, raiz;
+	raiz = (int)sqrt(numdatos);;
+	if(raiz % 2 != 0)
+		kernel_size = (raiz + 2)*(raiz + 2);
+	kernel_size = (raiz+1)*(raiz+1); 
+	
 	//Se declaran las dimenciones
-	dim3 dimBlock(1, 32);
-	dim3 dimGrid(1, 1);
+	dim3 dimBlock(BLOQUESIZE, 1);
+	dim3 dimGrid(kernel_size, 1);
 	//se ejecuta el kernel en la GPU
-	gridding_process<<<dimGrid, dimBlock>>>(C_X, C_Y, C_R, C_Y, numdatos, tamano, deltaU, C_r, C_k);
+	gridding_process<<<dimGrid, dimBlock>>>(C_X, C_Y, C_R, C_Y, numdatos, tamano, (float)deltaU, C_r, C_k);
 	//se espera a que terminen
 	cudaDeviceSynchronize();
 	//se obtiene la memoria de regreso
-	cudaMemcpy( r, C_r, tamano*tamano*sizeof(double), cudaMemcpyDeviceToHost); 
-	cudaMemcpy( k, C_k, tamano*tamano*sizeof(double), cudaMemcpyDeviceToHost); 
+	cudaMemcpy( r, C_r, tamano*tamano*sizeof(float), cudaMemcpyDeviceToHost); 
+	cudaMemcpy( k, C_k, tamano*tamano*sizeof(float), cudaMemcpyDeviceToHost); 
 	//se libera la memoria global CUDA para que pueda ser usada por otro proceso
 	cudaFree( C_X );
 	cudaFree( C_Y );
@@ -199,8 +206,8 @@ int main(int argc, char * const argv[])
 	FILE *f = fopen("salida_real","wb");
 	FILE *g = fopen("salida_imaginaria","wb");
 
-	fwrite(r,tamano*tamano, sizeof(double),f);
-	fwrite(k,tamano*tamano, sizeof(double),g);
+	fwrite(r, tamano*tamano, sizeof(float),f);
+	fwrite(k, tamano*tamano, sizeof(float),g);
 
 	timeend = clock(); // registramos el tiempo hasta el final
 	printf("Total = %f\n", (double) (timeend-timestart)/(double)CLOCKS_PER_SEC);
