@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <sys/times.h>
 #include <time.h>
+#include <cuda_runtime.h>
 #define PI 3.14159265358979323846
 #define FactorArcosegRad 0.00000484814
 
