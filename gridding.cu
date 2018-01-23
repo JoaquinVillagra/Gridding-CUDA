@@ -23,7 +23,7 @@ double arcoseg_radian(double deltax){
 @param archivo: puntero al archivo a leer
 @returns  */
 double* readFile(FILE* archivo, int tamano){
-	double* elementos = malloc(sizeof(double)*4*tamano);
+	double* elementos =(double*) malloc(sizeof(double)*4*tamano);
 	fread(elementos, tamano*4, sizeof(double), archivo);
 	return elementos;
 }
