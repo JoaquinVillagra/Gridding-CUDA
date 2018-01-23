@@ -10,11 +10,6 @@
 
 clock_t timestart, timeend;
 
-#if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 600
-#else
-__device__ double atomicAdd(double* a, double b) { return b; }
-#endif
-
 /**
 @brief Función que transforma un valor en arco segundo a radianes
 @param deltax: Valor numérico a transformar
@@ -35,27 +30,42 @@ double* readFile(FILE* archivo, int tamano){
 }
 
 __global__ 
-void gridding_process(double *X, double *Y, double *R, double *I, int num_datos, int tamano, double deltaU, double *r, double *k){
+void gridding_process(double *X, double *Y, int num_datos, int tamano, double deltaU, int *G){
 
-	int i;
+	__shared__ double x_s[32], y_s[32], g_s[32];
+	long i, pos;
 	double x, y, modx, mody;
-	for (i = threadIdx.x; i < num_datos; i+=blockDim.x)
+	if(threadIdx.x==0)
 	{
-		x = X[i]/deltaU+tamano/2;
-		y = Y[i]/deltaU+tamano/2;
-		modx = X[i] - x*deltaU;
-		mody = Y[i] - y*deltaU;
-		if(modx>deltaU/2){	
-			x+=1;
-		}
-		if (mody>deltaU/2)
+		for (i = 0; i < 32; i++)
 		{
-			y+=1;
+			x_s[i] = X[i+blockIdx.x*32];
+			y_s[i] = Y[i+blockIdx.x*32];
 		}
-		//r[(int)y*tamano+(int)x] += R[i];
-		//k[(int)y*tamano+(int)x] += I[i];
-		atomicAdd(&r[(int)y*tamano+(int)x], R[i]);
-		atomicAdd(&k[(int)y*tamano+(int)x], I[i]);
+	}
+	pos = blockIdx.x*32 + threadIdx.x;
+	
+	x = x_s[threadIdx.x]/deltaU+tamano/2;
+	y = y_s[threadIdx.x]/deltaU+tamano/2;
+	modx = x_s[threadIdx.x] - x*deltaU;
+	mody = y_s[threadIdx.x] - y*deltaU;
+	if(modx>deltaU/2){	
+		x+=1;
+	}
+	if (mody>deltaU/2)
+	{
+		y+=1;
+	}
+
+	g_s[pos] = (int)y*tamano+(int)x;
+
+	__syncthreads();
+	if (threadIdx.x==0)
+	{
+		for (i = 0; i < 32; i++)
+		{
+			G[i+blockIdx.x*32] = g_s[i];
+		}
 	}
 }
 
@@ -67,8 +77,7 @@ int main(int argc, char * const argv[])
 	double deltaU; 
 	char* archivo_entrada=NULL;
 	char* archivo_salida=NULL;
-	int i, j, c;
-	
+	int i, c;
 	opterr = 0;
 	while ((c = getopt (argc, argv, "i:z:d:N:o:")) != -1)
 		switch (c)
@@ -142,7 +151,8 @@ int main(int argc, char * const argv[])
 	double *X = (double*)malloc(sizeof(double)*numdatos); 
 	double *Y = (double*)malloc(sizeof(double)*numdatos); 
 	double *R = (double*)malloc(sizeof(double)*numdatos); 
-	double *I = (double*)malloc(sizeof(double)*numdatos);	
+	double *I = (double*)malloc(sizeof(double)*numdatos);
+	int *G = (int*)malloc(sizeof(int)*numdatos);	
 	//Quizas necesite dos vectores adicionales para el gridding [matrices desenroyadas]
 	double *r = (double*)malloc(sizeof(double)*tamano*tamano);
 	double *k = (double*)malloc(sizeof(double)*tamano*tamano);
@@ -153,7 +163,7 @@ int main(int argc, char * const argv[])
 		Y[i] = data[i+numdatos];
 		R[i] = data[i+2*numdatos];
 		I[i] = data[i+3*numdatos];
-
+		G[i] = 0;
 	}
 	for (i = 0; i < tamano*tamano; ++i)
 	{
@@ -165,37 +175,42 @@ int main(int argc, char * const argv[])
 	double *C_Y;
 	double *C_R;
 	double *C_I;
-	double *C_r;
-	double *C_k;
+	int *C_G;
 	//Se reserva memoria CUDA
 	cudaMalloc( (void**)&C_X, numdatos*sizeof(double)); 
 	cudaMalloc( (void**)&C_Y, numdatos*sizeof(double)); 
 	cudaMalloc( (void**)&C_R, numdatos*sizeof(double)); 
 	cudaMalloc( (void**)&C_I, numdatos*sizeof(double)); 
-	cudaMalloc( (void**)&C_r, tamano*tamano*sizeof(double)); 
-	cudaMalloc( (void**)&C_k, tamano*tamano*sizeof(double)); 
+	cudaMalloc( (void**)&C_G, numdatos*sizeof(int));
 	//se copia la matriz iniciada en las matrices de trabajo en memoria global GPU
 	cudaMemcpy( C_X, X, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
 	cudaMemcpy( C_Y, Y, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
 	cudaMemcpy( C_R, R, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
-	cudaMemcpy( C_I, I, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
+	cudaMemcpy( C_I, I, numdatos*sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy( C_G, G, numdatos*sizeof(int), cudaMemcpyHostToDevice); 
 	//Se declaran las dimenciones
-	dim3 dimBlock(1, 32);
+	dim3 dimBlock(32, 1);
 	dim3 dimGrid(1, 1);
 	//se ejecuta el kernel en la GPU
-	gridding_process<<<dimGrid, dimBlock>>>(C_X, C_Y, C_R, C_Y, numdatos, tamano, deltaU, C_r, C_k);
+	gridding_process<<<dimGrid, dimBlock>>>(C_X, C_Y, numdatos, tamano, deltaU, C_G);
 	//se espera a que terminen
 	cudaDeviceSynchronize();
 	//se obtiene la memoria de regreso
-	cudaMemcpy( r, C_r, tamano*tamano*sizeof(double), cudaMemcpyDeviceToHost); 
-	cudaMemcpy( k, C_k, tamano*tamano*sizeof(double), cudaMemcpyDeviceToHost); 
+	cudaMemcpy( G, C_G, numdatos*sizeof(double), cudaMemcpyDeviceToHost); 
 	//se libera la memoria global CUDA para que pueda ser usada por otro proceso
 	cudaFree( C_X );
 	cudaFree( C_Y );
 	cudaFree( C_R );
 	cudaFree( C_I );
-	cudaFree( C_r );
-	cudaFree( C_k );
+	cudaFree( C_G );
+	//Secuencialmente se hace reducción a la posicion
+	for (i = 0; i < numdatos; i++)
+	{
+		printf("G = %d\n", G[i] );
+		r[G[i]] += R[i];
+		k[G[i]] += I[i];
+	}
+
 	//Se imprime salida
 	FILE *f = fopen("salida_real","wb");
 	FILE *g = fopen("salida_imaginaria","wb");
