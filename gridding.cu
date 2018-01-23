@@ -29,8 +29,28 @@ double* readFile(FILE* archivo, int tamano){
 }
 
 __global__ 
-void gridding_process(){
+void gridding_process(double *X, double *Y, double *R, double *I, int num_datos, int tamano, double deltaU, double *r, double *k){
 
+	int i;
+	double x, y, modx, mody;
+	for (i = threadIdx.x; i < num_datos; i+=blockDim.x)
+	{
+		x = X[i]/deltaU+tamano/2;
+		y = Y[i]/deltaU+tamano/2;
+		modx = X[i] - x*deltaU;
+		mody = Y[i] - y*deltaU;
+		if(modx>deltaU/2){	
+			x+=1;
+		}
+		if (mody>deltaU/2)
+		{
+			y+=1;
+		}
+		//r[(int)y*tamano+(int)x] += R[i];
+		//k[(int)y*tamano+(int)x] += I[i];
+		atomicAdd(&r[(int)y*tamano+(int)x], R[i]);
+		atomicAdd(&k[(int)y*tamano+(int)x], I[i]);
+	}
 }
 
 int main(int argc, char * const argv[])
@@ -110,25 +130,8 @@ int main(int argc, char * const argv[])
 	//Lectura de entrada
 	FILE *entrada = fopen(archivo_entrada,"r");
 	double* data = readFile(entrada,numdatos);
+	fclose(entrada);
 
-	double x, y, modx, mody;
-	//Crea matrices con memoria dinamica
-	double **matriz_real = (double**)malloc(sizeof(double*)*tamano);
-	double **matriz_i = (double**)malloc(sizeof(double*)*tamano);
-	for (i = 0; i < tamano; ++i)
-	{
-		matriz_real[i] = (double*)malloc(sizeof(double)*tamano);
-		matriz_i[i] = (double*)malloc(sizeof(double)*tamano);
-	}
-	//Inicializa matrices en cero
-	for (i = 0; i < tamano; ++i)
-	{
-		for (j = 0; j < tamano; ++j)
-		{
-			matriz_real[i][j]=0;
-			matriz_i[i][j]=0;
-		}
-	}
 	//Creando arrays para coordenada X, Y, R e I
 	double *X = (double*)malloc(sizeof(double)*numdatos); 
 	double *Y = (double*)malloc(sizeof(double)*numdatos); 
@@ -146,53 +149,54 @@ int main(int argc, char * const argv[])
 		I[i] = data[i+3*numdatos];
 
 	}
+	for (i = 0; i < tamano*tamano; ++i)
+	{
+		r[i] = 0;
+		k[i] = 0;
+	}
 	//se declaran las variables CUDA
 	double *C_X;
 	double *C_Y;
 	double *C_R;
 	double *C_I;
+	double *C_r;
+	double *C_k;
 	//Se reserva memoria CUDA
 	cudaMalloc( (void**)&C_X, numdatos*sizeof(double)); 
 	cudaMalloc( (void**)&C_Y, numdatos*sizeof(double)); 
 	cudaMalloc( (void**)&C_R, numdatos*sizeof(double)); 
 	cudaMalloc( (void**)&C_I, numdatos*sizeof(double)); 
+	cudaMalloc( (void**)&C_r, tamano*tamano*sizeof(double)); 
+	cudaMalloc( (void**)&C_k, tamano*tamano*sizeof(double)); 
 	//se copia la matriz iniciada en las matrices de trabajo en memoria global GPU
 	cudaMemcpy( C_X, X, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
 	cudaMemcpy( C_Y, Y, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
 	cudaMemcpy( C_R, R, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
 	cudaMemcpy( C_I, I, numdatos*sizeof(double), cudaMemcpyHostToDevice); 
-
 	//Se declaran las dimenciones
-	//dim3 dimBlock( ? , ? );
-	//dim3 dimGrid( 1, 1 );
-
-	for (i = 0; i < numdatos; i++)
-	{
-		//printf("[%lf,%lf,%lf,%lf]\n",data[i],data[numdatos+i],data[2*numdatos+i],data[3*numdatos+i] );
-		x = X[i]/deltaU+tamano/2;
-		y = Y[i]/deltaU+tamano/2;
-		modx = X[i] - x*deltaU;
-		mody = Y[i] - y*deltaU;
-		if(modx>deltaU/2){	
-			x+=1;
-		}
-		if (mody>deltaU/2)
-		{
-			y+=1;
-		}
-		//printf("x es: %d e y es: %d\n", (int)x, (int)y);
-		matriz_real[(int)y][(int)x] += R[i];
-		matriz_i[(int)y][(int)x] += I[i];
-	}
-	fclose(entrada);
-	//printf("Delta U %lf\n", deltaU );
+	dim3 dimBlock(1, 32);
+	dim3 dimGrid(1, 1);
+	//se ejecuta el kernel en la GPU
+	gridding_process<<<dimGrid, dimBlock>>>(C_X, C_Y, C_R, C_Y, numdatos, tamano, deltaU, C_r, C_k);
+	//se espera a que terminen
+	cudaDeviceSynchronize();
+	//se obtiene la memoria de regreso
+	cudaMemcpy( r, C_r, tamano*tamano*sizeof(double), cudaMemcpyDeviceToHost); 
+	cudaMemcpy( k, C_k, tamano*tamano*sizeof(double), cudaMemcpyDeviceToHost); 
+	//se libera la memoria global CUDA para que pueda ser usada por otro proceso
+	cudaFree( C_X );
+	cudaFree( C_Y );
+	cudaFree( C_R );
+	cudaFree( C_I );
+	cudaFree( C_r );
+	cudaFree( C_k );
+	//Se imprime salida
 	FILE *f = fopen("salida_real","wb");
 	FILE *g = fopen("salida_imaginaria","wb");
-	for (i = 0; i < tamano; i++)
-	{
-		fwrite(matriz_real[i],tamano, sizeof(double),f);
-		fwrite(matriz_i[i],tamano, sizeof(double),g);
-	}
+
+	fwrite(r,tamano*tamano, sizeof(double),f);
+	fwrite(k,tamano*tamano, sizeof(double),g);
+
 	timeend = clock(); // registramos el tiempo hasta el final
 	printf("Total = %f\n", (double) (timeend-timestart)/(double)CLOCKS_PER_SEC);
 	return EXIT_SUCCESS;
