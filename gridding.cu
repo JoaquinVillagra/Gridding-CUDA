@@ -10,6 +10,11 @@
 
 clock_t timestart, timeend;
 
+#if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 600
+#else
+__device__ double atomicAdd(double* a, double b) { return b; }
+#endif
+
 /**
 @brief Función que transforma un valor en arco segundo a radianes
 @param deltax: Valor numérico a transformar
