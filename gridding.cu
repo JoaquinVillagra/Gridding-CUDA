@@ -114,7 +114,7 @@ int main(int argc, char * const argv[])
 				break;
 			case 'o':
 				archivo_salida = optarg;
-				archivo_salida_i = optarg;
+				strcpy(archivo_salida_i, archivo_salida);
 				break;
 			case '?':
 				if (optopt == 'i' ||optopt == 'z' ||optopt == 'd'||optopt == 'N' ||optopt == 'o')
