@@ -8,7 +8,7 @@
 #include <cuda_runtime.h>
 #define PI 3.14159265358979323846
 #define FactorArcosegRad 0.00000484814
-#define BLOQUESIZE 32
+#define BLOQUESIZE 16
 
 clock_t timestart, timeend;
 
