@@ -23,7 +23,7 @@ float arcoseg_radian(float deltax){
 /**
 @brief Función que lee el archivo de entrada
 @param archivo: puntero al archivo a leer
-@param archivo: puntero al archivo a leer
+@param tamano: Numero de visibilidades del archivo a leer
 @returns  */
 double* readFile(FILE* archivo, int tamano){
 	double* elementos =(double*) malloc(sizeof(double)*4*tamano);
@@ -31,16 +31,28 @@ double* readFile(FILE* archivo, int tamano){
 	return elementos;
 }
 
+
+/**
+@brief Función ejecuta el proceso de gridding
+@param U: Valores de la coordenada U en el plano de Fourier
+@param V: Valores de la coordenada V en el plano de Fourier
+@param R: Valores reales de la visibilidad en el plano de Fourier
+@param I: Valores imaginarios la visibilidad en el plano de Fourier
+@param num_datos: Cantidad de visibilidades ingresadas o dimensión de los vectores anteriores
+@param tamano: Lado de la matriz a construir, si tamano es 512 se construye una matriz de 512X512
+@param V: Valores de la coordenada V en el plano de Fourier
+@param deltaU: Valor delta necesario para determinar la vecindad de cada pixel de la grilla regular
+@param r: vector de valores reales de la salida del proceso de gridding
+@param k: vector de valores imaginarios de la salida del proceso de gridding
+@returns  */
 __global__ void gridding_process(float *U, float *V, float *R, float *I, int num_datos, int tamano, float deltaU, float *r, float *k)
 {
 	int i = blockDim.x * blockIdx.x + threadIdx.x;
-	//printf("Hola %d\n", i );
 	if(i<num_datos)
 	{
 		float x, y, modx, mody;
 		x = U[i]/deltaU+tamano/2;
 		y = V[i]/deltaU+tamano/2;
-		//printf("%f - %f\n", U[i], V[i]);
 		modx = U[i] - x*deltaU;
 		mody = V[i] - y*deltaU;
 
@@ -121,15 +133,15 @@ int main(int argc, char * const argv[])
 			- Cadenas no nulas
 	**/
 	if(tamano<=0){
-		printf("El parametro -N debe estár y ser mayor que 0\n");
+		printf("El parametro -N debe existir y ser mayor que 0\n");
 		exit(1);
 	}
 	if(numdatos==0){
-		printf("El parametro -z debe estár y ser mayor que 0\n");
+		printf("El parametro -z debe existir y ser mayor que 0\n");
 		exit(1);
 	}
 	if(deltaX_arcoseg==0){
-		printf("El parametro -d debe estár y ser mayor que 0\n");
+		printf("El parametro -d debe existir y ser mayor que 0\n");
 		exit(1);
 	}
 	if(archivo_entrada==NULL){
@@ -195,7 +207,6 @@ int main(int argc, char * const argv[])
 	cudaMemcpy( C_I, I, numdatos*sizeof(float), cudaMemcpyHostToDevice); 
 	cudaMemcpy( C_r, r, tamano*tamano*sizeof(float), cudaMemcpyHostToDevice); 
 	cudaMemcpy( C_k, k, tamano*tamano*sizeof(float), cudaMemcpyHostToDevice); 
-
 	//determino dimension para el kernel
 	long data_size_2 = upper_power_of_two(numdatos);
 	//Se declaran las dimenciones
@@ -218,16 +229,14 @@ int main(int argc, char * const argv[])
 	cudaFree( C_r );
 	cudaFree( C_k );
 	//Se imprime salida
-	FILE *f = fopen("salida_real","wb");
-	FILE *g = fopen("salida_imaginaria","wb");
-
+	FILE *f = fopen(strcat(archivo_salida, "real.raw"),"wb");
+	FILE *g = fopen(strcat(archivo_salida, "img.raw"),"wb");
 	fwrite(r, tamano*tamano, sizeof(float),f);
 	fwrite(k, tamano*tamano, sizeof(float),g);
-
 	fclose(f);
 	fclose(g);
-
-	timeend = clock(); // registramos el tiempo hasta el final
+	//Se mide el tiempo utilizado
+	timeend = clock();
 	printf("Total = %f\n", (double) (timeend-timestart)/(double)CLOCKS_PER_SEC);
 	return EXIT_SUCCESS;
 }
