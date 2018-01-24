@@ -4,7 +4,7 @@ R = fread(f, 'double');
 %I = fread(g, 'double');
 fclose(f);
 %fclose(g);
-R = reshape(R,2048,2048);
+R = reshape(R,512,512);
 %I = reshape(I,512,512);
 %H = R + I*1j;
 %H = H';
