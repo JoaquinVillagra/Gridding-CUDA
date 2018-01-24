@@ -114,7 +114,6 @@ int main(int argc, char * const argv[])
 				break;
 			case 'o':
 				archivo_salida = optarg;
-				strcpy(archivo_salida_i, archivo_salida);
 				break;
 			case '?':
 				if (optopt == 'i' ||optopt == 'z' ||optopt == 'd'||optopt == 'N' ||optopt == 'o')
@@ -231,6 +230,7 @@ int main(int argc, char * const argv[])
 	cudaFree( C_r );
 	cudaFree( C_k );
 	//Se imprime salida
+	strcpy(archivo_salida_i, archivo_salida);
 	FILE *f = fopen(strcat(archivo_salida, "real.raw"),"wb");
 	FILE *g = fopen(strcat(archivo_salida_i, "img.raw"),"wb");
 	fwrite(r, tamano*tamano, sizeof(float),f);
