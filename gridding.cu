@@ -94,6 +94,7 @@ int main(int argc, char * const argv[])
 	float deltaU; 
 	char* archivo_entrada=NULL;
 	char* archivo_salida=NULL;
+	char* archivo_salida_i=NULL;
 	int i, c;
 	opterr = 0;
 	while ((c = getopt (argc, argv, "i:z:d:N:o:")) != -1)
@@ -113,6 +114,7 @@ int main(int argc, char * const argv[])
 				break;
 			case 'o':
 				archivo_salida = optarg;
+				archivo_salida_i = optarg;
 				break;
 			case '?':
 				if (optopt == 'i' ||optopt == 'z' ||optopt == 'd'||optopt == 'N' ||optopt == 'o')
@@ -230,7 +232,7 @@ int main(int argc, char * const argv[])
 	cudaFree( C_k );
 	//Se imprime salida
 	FILE *f = fopen(strcat(archivo_salida, "real.raw"),"wb");
-	FILE *g = fopen(strcat(archivo_salida, "img.raw"),"wb");
+	FILE *g = fopen(strcat(archivo_salida_i, "img.raw"),"wb");
 	fwrite(r, tamano*tamano, sizeof(float),f);
 	fwrite(k, tamano*tamano, sizeof(float),g);
 	fclose(f);
