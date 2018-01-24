@@ -230,7 +230,7 @@ int main(int argc, char * const argv[])
 	cudaFree( C_r );
 	cudaFree( C_k );
 	//Se imprime salida
-	archivo_salida_i = malloc(sizeof(archivo_salida)*2);
+	archivo_salida_i = (char*)malloc(sizeof(archivo_salida)*2);
 	strcpy(archivo_salida_i, archivo_salida);
 	FILE *f = fopen(strcat(archivo_salida, "real.raw"),"wb");
 	FILE *g = fopen(strcat(archivo_salida_i, "img.raw"),"wb");
