@@ -94,7 +94,7 @@ int main(int argc, char * const argv[])
 	float deltaU; 
 	char* archivo_entrada=NULL;
 	char* archivo_salida=NULL;
-	char* archivo_salida_i=NULL;
+	char* archivo_salida_i;
 	int i, c;
 	opterr = 0;
 	while ((c = getopt (argc, argv, "i:z:d:N:o:")) != -1)
@@ -230,6 +230,7 @@ int main(int argc, char * const argv[])
 	cudaFree( C_r );
 	cudaFree( C_k );
 	//Se imprime salida
+	archivo_salida_i = malloc(sizeof(archivo_salida)*2);
 	strcpy(archivo_salida_i, archivo_salida);
 	FILE *f = fopen(strcat(archivo_salida, "real.raw"),"wb");
 	FILE *g = fopen(strcat(archivo_salida_i, "img.raw"),"wb");
